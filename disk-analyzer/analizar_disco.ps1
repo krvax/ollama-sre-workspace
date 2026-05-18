@@ -7,8 +7,42 @@ param(
     [string]$Disco = "C:\",
     [int]$Top = 50,
     [switch]$TodosLosDiscos,
-    [switch]$ExportarCSV
+    [switch]$ExportarCSV,
+    [string[]]$Excluir = @(),
+    [switch]$PassThru
 )
+
+# Inicializar patrones de exclusión en ámbito de script
+$script:ExcluirPatrones = $Excluir
+
+function Test-Excluido {
+    param(
+        [string]$RutaCompleta,
+        [bool]$EsCarpeta = $false
+    )
+    if (-not $script:ExcluirPatrones) { return $false }
+    
+    foreach ($patron in $script:ExcluirPatrones) {
+        if ([string]::IsNullOrWhiteSpace($patron)) { continue }
+        
+        $patronNormal = $patron.Replace("/", "\")
+        $rutaNormal = $RutaCompleta.Replace("/", "\")
+        
+        # Coincidencia directa o por comodín del nombre base
+        if ($rutaNormal -like $patronNormal -or (Split-Path $rutaNormal -Leaf) -like $patronNormal) {
+            return $true
+        }
+        # Si es una carpeta, verificar si coincide con un patrón tipo "C:\Windows\*"
+        if ($EsCarpeta -and ($rutaNormal + "\*") -like $patronNormal) {
+            return $true
+        }
+        # Si el patrón representa una carpeta absoluta (ej: "C:\Windows"), verificar si la ruta empieza por ella
+        if ($patronNormal -match "^[A-Za-z]:\\" -and $rutaNormal.StartsWith($patronNormal.TrimEnd('\'), [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
 
 function Write-Progreso {
     param([string]$Mensaje, [string]$Color = "Cyan")
@@ -34,17 +68,26 @@ function Get-ArchivosOrdenados {
 
     # Archivos en la raiz
     Get-ChildItem -Path $Ruta -File -ErrorAction SilentlyContinue | ForEach-Object {
-        $archivos.Add($_)
-        $contArchivos++
+        if (-not (Test-Excluido -RutaCompleta $_.FullName -EsCarpeta $false)) {
+            $archivos.Add($_)
+            $contArchivos++
+        }
     }
 
     # Subcarpetas con progreso
     foreach ($carpeta in $carpetas) {
         $contCarpetas++
 
+        # Saltar carpetas excluidas de inmediato para ahorrar tiempo de escaneo
+        if (Test-Excluido -RutaCompleta $carpeta.FullName -EsCarpeta $true) {
+            continue
+        }
+
         Get-ChildItem -Path $carpeta.FullName -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
-            $archivos.Add($_)
-            $contArchivos++
+            if (-not (Test-Excluido -RutaCompleta $_.FullName -EsCarpeta $false)) {
+                $archivos.Add($_)
+                $contArchivos++
+            }
         }
 
         $ahora = Get-Date
@@ -103,9 +146,14 @@ foreach ($d in $discos) {
 $todos = $todos | Sort-Object SizeMB -Descending | Select-Object -First $Top
 
 $duracionTotal = [math]::Round(((Get-Date) - $tiempoTotal).TotalSeconds, 1)
-Write-Host ""
-Write-Host "===== TOP $Top ARCHIVOS MAS PESADOS (tiempo total: $duracionTotal seg) =====" -ForegroundColor Yellow
-$todos | Format-Table -AutoSize -Wrap SizeMB, SizeGB, LastWriteTime, FullName
+
+if ($PassThru) {
+    return $todos
+} else {
+    Write-Host ""
+    Write-Host "===== TOP $Top ARCHIVOS MAS PESADOS (tiempo total: $duracionTotal seg) =====" -ForegroundColor Yellow
+    $todos | Format-Table -AutoSize -Wrap SizeMB, SizeGB, LastWriteTime, FullName
+}
 
 # ── Exportar CSV ─────────────────────────────────────────────
 if ($ExportarCSV) {

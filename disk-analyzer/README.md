@@ -21,9 +21,10 @@ Disponible en **PowerShell** y **Python**, ambas con las mismas funciones.
 .\analizar_disco.ps1
 ```
 
-### Cambiar disco y cantidad
+### Cambiar disco, cantidad y exclusiones rápidas
 ```powershell
-.\analizar_disco.ps1 -Disco "D:\" -Top 20
+# Encuentra el top 20, excluyendo archivos zip y vhdx
+.\analizar_disco.ps1 -Disco "D:\" -Top 20 -Excluir "*.zip", "*.vhdx"
 ```
 
 ### Analizar TODOS los discos locales
@@ -36,10 +37,36 @@ Disponible en **PowerShell** y **Python**, ambas con las mismas funciones.
 .\analizar_disco.ps1 -ExportarCSV
 ```
 
-### Todo junto
+---
+
+## 🚚 Mudanza Segura de Archivos (`mover_archivos.ps1`)
+
+El script de mudanza ahora soporta **pipelining interactivo** y posee **capas de seguridad inteligentes** para proteger la estabilidad de tu sistema operativo:
+
+### 1. Escaneo y Mudanza Interactiva en un solo Paso
+Busca los archivos más pesados en el disco especificado y activa el menú interactivo para excluir por número los archivos que decidas conservar:
 ```powershell
-.\analizar_disco.ps1 -TodosLosDiscos -Top 100 -ExportarCSV
+.\mover_archivos.ps1 -Disco "C:\" -Top 15 -Destino "E:\Movidos"
 ```
+
+### 2. Pipeline Nativo (PowerShell Way)
+Analiza y canaliza los objetos directamente al script de mudanza usando la bandera `-PassThru`:
+```powershell
+.\analizar_disco.ps1 -Disco "C:\" -Top 10 -PassThru | .\mover_archivos.ps1 -Destino "E:\Movidos"
+```
+
+### 3. Exclusiones Personalizadas y Simulación (Súper Seguro)
+Simula el movimiento sin tocar ningún archivo real, aplicando exclusiones adicionales:
+```powershell
+.\mover_archivos.ps1 -Disco "C:\" -Top 10 -Destino "E:\Movidos" -Excluir "*.mp4", "*.iso" -Simular
+```
+
+### 🔒 Capas de Seguridad Incorporadas:
+*   **Exclusión Automática de Sistema**: El script ignorará siempre de forma automática archivos críticos (`*.sys`, `*.dll`, carpetas de `Windows`, carpetas de `AppData` y carpetas de `Program Files`) para evitar cualquier tipo de corrupción o inestabilidad en el SO.
+*   **Control de Espacio**: Verifica de forma previa si el disco destino tiene suficiente espacio libre (con un margen de seguridad) antes de iniciar la reubicación de cada bloque.
+*   **Menú Interactivo**: Te permite ingresar de manera visual los números de los archivos a omitir (ej: `1, 3`), o abortar completamente escribiendo `todas`. Si deseas automatizar de forma desatendida en un script cron, añade la bandera `-Force` para omitir la confirmación manual.
+
+---
 
 > **Nota:** Si PowerShell bloquea la ejecución, corre esto primero una sola vez:
 > ```powershell
