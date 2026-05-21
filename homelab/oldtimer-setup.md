@@ -27,16 +27,59 @@
 - Acceso: `ssh admin@192.168.0.104` (directo, sin password)
 
 ### 3. GRUB — Boot automático
-- `GRUB_TIMEOUT=3` (arranca Linux solo en 3 seg, sin esperar input)
+- `GRUB_TIMEOUT=3` (arranca Linux solo en 3 seg)
+- `GRUB_TIMEOUT_STYLE=countdown` (muestra cuenta regresiva, no espera input)
 - Dual boot detectado (Windows presente) pero Linux es default
+- **Kernels:** Solo 6.8.0-111 (activo) + 6.8.0-110 (fallback)
 
-### 4. WiFi — Auto-connect
+#### Troubleshooting GRUB (22 Mayo 2026)
+
+**Problema:** Después de limpiar kernels, GRUB se quedaba esperando indefinidamente.
+
+**Causa raíz:** Linux Mint tiene un override en `/etc/default/grub.d/98_mintsysadm.cfg` que se carga **después** de `/etc/default/grub`. Este archivo sobreescribía con:
+```
+GRUB_TIMEOUT_STYLE=hidden
+GRUB_TIMEOUT=-1          # -1 = esperar para siempre
+```
+
+**Fix aplicado:**
+```bash
+# 1. Cambiar "hidden" por "countdown" en el override de Mint
+#    sed -i = editar archivo in-place
+#    's/viejo/nuevo/' = sustituir primera ocurrencia de "viejo" por "nuevo"
+sudo sed -i 's/GRUB_TIMEOUT_STYLE=hidden/GRUB_TIMEOUT_STYLE=countdown/' /etc/default/grub.d/98_mintsysadm.cfg
+
+# 2. Cambiar timeout de -1 (infinito) a 3 segundos en el override
+sudo sed -i 's/GRUB_TIMEOUT=-1/GRUB_TIMEOUT=3/' /etc/default/grub.d/98_mintsysadm.cfg
+
+# 3. Eliminar TODAS las líneas que contengan GRUB_TIMEOUT_STYLE en /etc/default/grub
+#    '/patrón/d' = borrar cualquier línea que matchee el patrón
+sudo sed -i '/GRUB_TIMEOUT_STYLE/d' /etc/default/grub
+
+# 4. Agregar una sola línea limpia al final
+echo 'GRUB_TIMEOUT_STYLE=countdown' | sudo tee -a /etc/default/grub
+
+# 5. Regenerar la config de GRUB
+sudo update-grub
+```
+
+**Lección:** En Linux Mint, los archivos en `/etc/default/grub.d/` se cargan en orden numérico y sobreescriben lo anterior. Siempre verificar esos overrides.
+
+**Estado final:**
+```
+/etc/default/grub:                    TIMEOUT=3, TIMEOUT_STYLE=countdown
+/etc/default/grub.d/98_mintsysadm.cfg: TIMEOUT=3, TIMEOUT_STYLE=countdown
+```
+
+### 4. WiFi — Auto-connect (system-wide)
 - Red: `Auto IZZI-AADA-5G-5G`
 - `autoconnect: yes` (conecta sin necesidad de login gráfico)
+- `connection.permissions: ""` (system-wide, no requiere usuario)
 - Interfaz: `wlp7s0`
+- `wifi-unblock.service` creado para desbloquear rfkill al boot
 
 ### 5. Optimización de RAM
-| Antes | Después |
+| Antes (setup inicial) | Después (optimizado) |
 |---|---|
 | ~1.1 GB usado | ~601 MB usado |
 | ~2.6 GB disponible | ~3.1 GB disponible |
@@ -49,14 +92,38 @@ vm.swappiness=10
 Usa RAM al máximo antes de tocar swap.
 
 ### 7. Servicios desactivados
-| Servicio | Razón |
-|---|---|
-| `bluetooth` | No se usan dispositivos BT |
-| `cups` | No se imprime desde esta máquina |
-| `ModemManager` | No hay módem 4G/USB |
-| `libvirtd` | No se corren VMs (KVM/QEMU) |
+| Servicio | Razón | Método |
+|---|---|---|
+| `bluetooth` | No se usan dispositivos BT | systemctl disable |
+| `cups` | No se imprime desde esta máquina | systemctl disable |
+| `ModemManager` | No hay módem 4G/USB | systemctl disable |
+| `libvirtd` | No se corren VMs (KVM/QEMU) | systemctl disable |
+| `mintreport-tray` | Notificaciones innecesarias (72 MB) | autostart Hidden=true |
+| `evolution-alarm-notify` | Calendario no usado (62 MB) | autostart Hidden=true |
+| `ibus` | Input method innecesario (34 MB) | im-config -n none |
+| `NetworkManager-wait-online` | Espera red innecesaria (1 min) | systemctl disable |
+| `lvm2-monitor` | No se usa LVM | systemctl disable |
+| `blueman-mechanism` | GUI bluetooth innecesaria | systemctl disable |
+| `virtlogd` | Logging de VMs no usadas | systemctl disable |
+| `postgresql` | No se necesita DB local | apt purge |
 
-### 8. WSL Interop (en la máquina principal, no en oldtimer)
+### 8. Lid Switch — Operar con tapa cerrada
+```ini
+# /etc/systemd/logind.conf
+HandleLidSwitch=ignore
+HandleLidSwitchExternalPower=ignore
+```
+Cerrar la tapa no suspende la máquina.
+
+### 9. GPU — Intel integrada (sin cambios necesarios)
+- **GPU:** Intel Mobile 4 Series (GM45 Express)
+- **Driver kernel:** `i915` (correcto, cargado)
+- **Driver Xorg:** `modesetting`
+- **OpenGL:** 4.5 (Mesa/crocus)
+- **Resolución:** 1366x768
+- No hay GPU dedicada, no requiere drivers adicionales
+
+### 10. WSL Interop (en la máquina principal, no en oldtimer)
 ```ini
 # /etc/wsl.conf (WSL Ubuntu principal)
 [boot]
@@ -71,14 +138,16 @@ Fix para que `kiro` y otros `.exe` de Windows funcionen desde WSL con systemd ha
 
 ---
 
-## 📊 Estado final
+## 📊 Estado final (22 Mayo 2026)
 
 ```
-RAM:        601 MB / 3.7 GB (16% usado)
+Boot total: ~1 min 11 seg (32s kernel/BIOS + 38s userspace)
+RAM:        ~500-600 MB en idle (sin Firefox)
 Swap:       0 B / 2 GB
-Servicios:  38 running
-Kernel:     6.8.0-111-generic
+Servicios:  ~28 running
+Kernel:     6.8.0-111-generic (fallback: 110)
 Desktop:    XFCE (sin compositor)
+SSD:        Kingston SV300S37A 240GB (SATA)
 ```
 
 ---
@@ -87,14 +156,11 @@ Desktop:    XFCE (sin compositor)
 
 - [ ] Reservar IP fija en el router (DHCP reservation por MAC: `00:22:fa:16:87:58`)
 - [ ] Instalar Tailscale para acceso remoto desde cualquier red
-- [ ] Limpiar kernels viejos (6.8.0-51, 60, 78, 100, 110) — dejar solo 111 + uno anterior
-- [ ] Configurar WiFi como system-wide (`nmcli connection modify ... connection.permissions ""`)
-- [ ] Evaluar Docker para homelab services
-- [ ] Considerar `lid close = ignore` para operar con tapa cerrada:
-  ```bash
-  # /etc/systemd/logind.conf
-  HandleLidSwitch=ignore
-  ```
+- [ ] Evaluar Docker para homelab services (OpenClaw, health checks)
+- [ ] Considerar operar headless (sin Xorg) para liberar ~107 MB más
+- [ ] Reducir procesos de Firefox: `about:config` → `dom.ipc.processCount` = 2
+- [ ] Desactivar udisks2 o blacklist Multi-Card reader (podría reducir boot ~16 seg más)
+- [ ] Configurar auto-login en LightDM (evitar pantalla de login)
 
 ---
 
