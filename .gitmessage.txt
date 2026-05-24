@@ -1,0 +1,12 @@
+# Mensaje de commit estándar
+# Reemplaza el tipo, el scope (opcional) y la descripción.
+# Ejemplos:
+# feat: agregar reporte de logs
+# fix: corregir parseo de líneas con formato inválido
+# chore: actualizar .gitignore
+# docs: actualizar README
+# refactor: simplificar función leer_log
+
+<tipo>(<scope opcional>): <descripción breve>
+
+<mensaje detallado opcional>
