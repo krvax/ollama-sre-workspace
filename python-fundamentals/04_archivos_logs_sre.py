@@ -41,13 +41,28 @@ print("Archivo service.log creado.")
 #    - Lee todas las líneas y retorna una lista de strings
 #    - Si el archivo no existe, atrapa FileNotFoundError y retorna una lista vacía
 #      (imprime un mensaje de error antes de retornar)
+def leer_log(file_name):
+    try:
+        with open(file_name,"r") as f:
+            return f.readlines()
+    except FileNotFoundError:
+        print(f"Error: El archivo {file_name} no existe.")
+        return []
+'''
+lineas = leer_log("service.log")
+print(len(lineas))  # debería dar 12
 
+lineas2 = leer_log("no_existe.log")
+print(len(lineas2))  # debería dar 0 + mensaje de error
+'''
 
 # 2. Crea una función "parsear_linea" que reciba una línea de log (string).
 #    - Separa la línea en partes: fecha, hora, severidad, servicio, mensaje
 #      (pista: .split() separa por espacios)
 #    - Retorna un diccionario con las claves: "timestamp", "severity", "service", "message"
 #    - Si la línea no tiene el formato esperado, lanza un ValueError
+def parsear_lineas(log_string):
+    log = log_string.split()
 
 
 # 3. Crea una función "generar_reporte" que reciba la lista de líneas.
